@@ -1,13 +1,16 @@
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
+from transformers import LlamaForCausalLM, LlamaTokenizer
+import torch
 
-# Load environment variables
 load_dotenv()
+# Load the tokenizer and LLaMA-2-Chat model from Hugging Face
+# Use a chat-optimized model
+model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
-# Get API key from environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
 
 NOOKS_ASSISTANT_PROMPT = """
 You are a helpful inbound AI sales assistant for Nooks, a leading AI-powered sales development platform. Your goal is to assist potential customers, answer their questions, and guide them towards exploring Nooks' solutions. Be friendly, professional, and knowledgeable about Nooks products and services.
@@ -38,7 +41,7 @@ Answer in exactly 1 sentence, no more. Do not use more than 20 words. Only direc
 """
 
 
-class SalesChatbot:
+class LlamaChatbot:
     def __init__(self):
         self.conversation_history = [
             {"role": "system", "content": NOOKS_ASSISTANT_PROMPT}
@@ -47,11 +50,34 @@ class SalesChatbot:
     def generate_response(self, user_input):
         self.conversation_history.append({"role": "user", "content": user_input})
 
-        response = client.chat.completions.create(
-            model="gpt-4", messages=self.conversation_history
+        # Prepare input for the LLaMA-2-Chat model (concatenate history)
+        conversation_str = "\n".join(
+            [
+                f"{entry['role']}: {entry['content']}"
+                for entry in self.conversation_history
+            ]
         )
 
-        ai_response = response.choices[0].message.content
+        # Tokenize input
+        inputs = tokenizer(
+            conversation_str, return_tensors="pt", max_length=512, truncation=True
+        ).to(device)
+
+        # Generate response from LLaMA-2-Chat
+        outputs = model.generate(
+            input_ids=inputs.input_ids.to(device),
+            attention_mask=inputs.attention_mask.to(device),
+            max_length=inputs.input_ids.shape[1]
+            + 150,  # Adjust max tokens for response
+            temperature=0.7,
+            top_p=0.9,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+
+        # Decode the model output and append to history
+        ai_response = tokenizer.decode(
+            outputs[:, inputs.input_ids.shape[-1] :][0], skip_special_tokens=True
+        ).strip()
         self.conversation_history.append({"role": "assistant", "content": ai_response})
 
         return ai_response

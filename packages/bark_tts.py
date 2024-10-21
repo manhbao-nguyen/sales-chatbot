@@ -1,15 +1,18 @@
-from bark import generate_audio,  preload_models, SAMPLE_RATE
+from bark import generate_audio, preload_models, SAMPLE_RATE
 from scipy.io.wavfile import write as write_wav
-#from IPython.display import Audio
+
+# from IPython.display import Audio
 import numpy as np
 import sounddevice as sd
 
 preload_models()
 
+
 def play_audio(audio_array, sample_rate=24000):
     """Play audio using sounddevice"""
     sd.play(audio_array, samplerate=sample_rate)
     sd.wait()  # Wait until the audio finishes playing
+
 
 def speak(text):
     try:
